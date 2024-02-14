@@ -1,0 +1,112 @@
+mql5
+//+------------------------------------------------------------------+
+//|                                             Gold Rock           |
+//|                                https://www.forexroboteasy.com    |
+//|                                          Forex Robot Easy Team   |
+//+------------------------------------------------------------------+
+
+// Global Variables
+double lotSize = 0.01; // Initial lot size
+double stopLoss = 100; // Fixed Stop Loss
+int magicNumber = 123456; // Magic number for identification
+int slippage = 3; // Maximum allowed slippage in points
+
+//+------------------------------------------------------------------+
+//| Expert initialization function                                   |
+//+------------------------------------------------------------------+
+int OnInit()
+{
+    // Set stop loss
+    if (!OrderStopLoss()) {
+        Print('Failed to set stop loss! Error: ', GetLastError());
+    }
+
+    return(INIT_SUCCEEDED);
+}
+
+//+------------------------------------------------------------------+
+//| Expert deinitialization function                                 |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason)
+{
+    // Close any open orders
+    OrderCloseAll();
+}
+
+//+------------------------------------------------------------------+
+//| Expert tick function                                             |
+//+------------------------------------------------------------------+
+void OnTick()
+{
+    double currentPrice = MarketInfo(Symbol(), MODE_BID);
+    double previousPrice = iClose(Symbol(), PERIOD_CURRENT, 1);
+
+    // Determine market volatility, momentum, and trend
+    double volatility = iATR(Symbol(), PERIOD_CURRENT, 14, 0);
+    double momentum = currentPrice - previousPrice;
+    int trend = iMA(Symbol(), PERIOD_CURRENT, 200, 0, MODE_SMA, PRICE_CLOSE);
+
+    // Entry condition
+    bool entryCondition = (volatility > 0 && momentum > 0 && currentPrice > trend);
+
+    // Exit condition
+    bool exitCondition = (currentPrice < trend);
+
+    // Execute trades
+    if (entryCondition) {
+        // Calculate lot size based on account balance and risk level
+        double accountBalance = AccountBalance();
+        double riskPercentage = 1.0; // 1% risk per trade
+        double maxRiskAmount = accountBalance * riskPercentage / 100.0;
+        double maxLotSize = NormalizeDouble(maxRiskAmount / stopLoss, 2);
+        double tradeLotSize = MathMin(lotSize, maxLotSize);
+
+        // Open buy order
+        if (!OrderSend(Symbol(), OP_BUY, tradeLotSize, currentPrice, slippage, currentPrice - stopLoss, currentPrice + stopLoss, 'Gold Rock', magicNumber)) {
+            Print('Failed to open buy order! Error: ', GetLastError());
+        }
+    }
+    else if (exitCondition) {
+        // Close all open orders
+        OrderCloseAll();
+    }
+
+    // Error handling
+    if (GetLastError() != 0) {
+        Print('Error occurred! Error: ', GetLastError());
+    }
+}
+
+//+------------------------------------------------------------------+
+//| Helper function to close all open orders                         |
+//+------------------------------------------------------------------+
+void OrderCloseAll()
+{
+    for (int i = 0; i < OrdersTotal(); i++) {
+        if (OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) {
+            if (OrderSymbol() == Symbol() && OrderMagicNumber() == magicNumber) {
+                if (!OrderClose(OrderTicket(), OrderLots(), MarketInfo(OrderSymbol(), MODE_BID), slippage)) {
+                    Print('Failed to close order! Error: ', GetLastError());
+                }
+            }
+        }
+    }
+}
+
+//+------------------------------------------------------------------+
+//| Helper function to set stop loss for all open orders             |
+//+------------------------------------------------------------------+
+bool OrderStopLoss()
+{
+    for (int i = 0; i < OrdersTotal(); i++) {
+        if (OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) {
+            if (OrderSymbol() == Symbol() && OrderMagicNumber() == magicNumber) {
+                if (!OrderModify(OrderTicket(), OrderOpenPrice(), NormalizeDouble(OrderOpenPrice() - stopLoss, Digits), OrderTakeProfit(), 0, clrNONE)) {
+                    return false;
+                }
+            }
+        }
+    }
+
+    return true;
+}
